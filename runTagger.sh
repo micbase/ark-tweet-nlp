@@ -2,4 +2,6 @@
 set -eu
 
 # Run the tagger (and tokenizer).
-java -XX:ParallelGCThreads=2 -Xmx500m -jar $(dirname $0)/ark-tweet-nlp-0.3.2.jar "$@"
+CURPATH=$(dirname $0)
+java -Xbootclasspath/a:$CURPATH/ark-tweet-nlp/py4j-0.7.jar:$CURPATH/ark-tweet-nlp/weka.jar -XX:ParallelGCThreads=2 -Xmx500m -jar $CURPATH/ark-tweet-nlp-0.3.2.jar "$@" &
+echo $! > /tmp/sctagger-$1.pid

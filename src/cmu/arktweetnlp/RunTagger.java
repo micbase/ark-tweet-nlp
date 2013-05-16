@@ -1,5 +1,8 @@
 package cmu.arktweetnlp;
 
+//package py4j.examples;
+import py4j.GatewayServer;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.LineNumberReader;
@@ -18,6 +21,12 @@ import cmu.arktweetnlp.io.JsonTweetReader;
 import cmu.arktweetnlp.util.BasicFileIO;
 import edu.stanford.nlp.util.StringUtils;
 
+import weka.core.Instance;
+import weka.core.Instances;
+import weka.classifiers.Classifier;
+import weka.core.Attribute;
+import weka.core.FastVector;
+
 /**
  * Commandline interface to run the Twitter POS tagger with a variety of possible input and output formats.
  * Also does basic evaluation if given labeled input text.
@@ -28,8 +37,8 @@ public class RunTagger {
 	Tagger tagger;
 	
 	// Commandline I/O-ish options
-	String inputFormat = "auto";
-	String outputFormat = "auto";
+	String inputFormat = "text";
+	String outputFormat = "conll";
 	int inputField = 1;
 	
 	String inputFilename;
@@ -41,7 +50,7 @@ public class RunTagger {
 	
 	public static enum Decoder { GREEDY, VITERBI };
 	public Decoder decoder = Decoder.GREEDY; 
-	public boolean showConfidence = true;
+	public boolean showConfidence = false;
 
 	PrintStream outputStream;
 	Iterable<Sentence> inputIterable = null;
@@ -61,8 +70,17 @@ public class RunTagger {
 		System.err.println(message);
 		System.exit(-1);
 	}
-	public RunTagger() throws UnsupportedEncodingException {
+
+    //public RunTagger() {
+    //}
+
+	public RunTagger() throws IOException, UnsupportedEncodingException {
 		// force UTF-8 here, so don't need -Dfile.encoding
+        tagger = new Tagger();
+        if (!justTokenize) {
+            tagger.loadModel(modelFilename);			
+            System.err.println("Model Loaded.\n");
+        }
 		this.outputStream = new PrintStream(System.out, true, "UTF-8");
 	}
 	public void detectAndSetInputFormat(String tweetData) throws IOException {
@@ -75,72 +93,125 @@ public class RunTagger {
 			inputFormat = "text";
 		}
 	}
-	
-	public void runTagger() throws IOException, ClassNotFoundException {
-		
-		tagger = new Tagger();
-		if (!justTokenize) {
-			tagger.loadModel(modelFilename);			
-		}
-		
-		if (inputFormat.equals("conll")) {
-			runTaggerInEvalMode();
-			return;
-		} 
 
-		JsonTweetReader jsonTweetReader = new JsonTweetReader();
-		
-		LineNumberReader reader = new LineNumberReader(BasicFileIO.openFileToReadUTF8(inputFilename));
-		String line;
-		long currenttime = System.currentTimeMillis();
-		int numtoks = 0;
-		while ( (line = reader.readLine()) != null) {
-			String[] parts = line.split("\t");
-			String tweetData = parts[inputField-1];
-			
-			if (reader.getLineNumber()==1) {
-				if (inputFormat.equals("auto")) {
-					detectAndSetInputFormat(tweetData);
-				}
-			}
-			
-			String text;
-			if (inputFormat.equals("json")) {
-				text = jsonTweetReader.getText(tweetData);
-				if (text==null) {
-					System.err.println("Warning, null text (JSON parse error?), using blank string instead");
-					text = "";
-				}
-			} else {
-				text = tweetData;
-			}
-			
-			Sentence sentence = new Sentence();
-			
-			sentence.tokens = Twokenize.tokenizeRawTweetText(text);
-			ModelSentence modelSentence = null;
+    public String voting_with4(double s1, double s2, String s3, String s4, String s5) {
 
-			if (sentence.T() > 0 && !justTokenize) {
-				modelSentence = new ModelSentence(sentence.T());
-				tagger.featureExtractor.computeFeatures(sentence, modelSentence);
-				goDecode(modelSentence);
-			}
-				
-			if (outputFormat.equals("conll")) {
-				outputJustTagging(sentence, modelSentence);
-			} else {
-				outputPrependedTagging(sentence, modelSentence, justTokenize, line);				
-			}
-			numtoks += sentence.T();
-		}
-		long finishtime = System.currentTimeMillis();
-		System.err.printf("Tokenized%s %d tweets (%d tokens) in %.1f seconds: %.1f tweets/sec, %.1f tokens/sec\n",
-				justTokenize ? "" : " and tagged", 
-				reader.getLineNumber(), numtoks, (finishtime-currenttime)/1000.0,
-				reader.getLineNumber() / ((finishtime-currenttime)/1000.0),
-				numtoks / ((finishtime-currenttime)/1000.0)
-		);
-		reader.close();
+        FastVector      atts;
+        FastVector      attVals;
+        Instance        inst;
+        double[]        vals;
+        int             i;
+        Instances data;
+
+        atts = new FastVector();
+        atts.addElement(new Attribute("s1"));
+        atts.addElement(new Attribute("s2"));
+        attVals = new FastVector();
+        attVals.addElement("P");
+        attVals.addElement("N");
+        attVals.addElement("O");
+        atts.addElement(new Attribute("s3", attVals));
+        atts.addElement(new Attribute("s4", attVals));
+        atts.addElement(new Attribute("s5", attVals));
+
+        vals = new double[5];
+        vals[0] = s1;
+        vals[1] = s2;
+        vals[2] = attVals.indexOf(s3);
+        vals[3] = attVals.indexOf(s4);
+        vals[4] = attVals.indexOf(s5);
+        inst = new Instance(1.0, vals);
+
+        data = new Instances("Sentiment", atts, 0);
+        data.add(inst);
+        data.setClassIndex(4);
+
+        try {
+            Classifier tree = (Classifier) weka.core.SerializationHelper.read("./sentiment_with4.model");
+            double clsLabel = tree.classifyInstance(data.instance(0));
+            return data.classAttribute().value((int) clsLabel);
+        }
+        catch (FileNotFoundException e){
+            System.out.println(e);
+            return "Error file not found";
+        }
+        catch (IOException e){
+            System.out.println(e);
+            return "Error io";
+        }
+        catch (Exception e){
+            System.out.println(e);
+            return "Error";
+        }
+    }
+    
+    public String voting_without4(double s1, double s2, String s3, String s5) {
+
+        FastVector      atts;
+        FastVector      attVals;
+        Instance        inst;
+        double[]        vals;
+        int             i;
+        Instances data;
+
+        atts = new FastVector();
+        atts.addElement(new Attribute("s1"));
+        atts.addElement(new Attribute("s2"));
+        attVals = new FastVector();
+        attVals.addElement("P");
+        attVals.addElement("N");
+        attVals.addElement("O");
+        atts.addElement(new Attribute("s3", attVals));
+        atts.addElement(new Attribute("s5", attVals));
+
+        vals = new double[4];
+        vals[0] = s1;
+        vals[1] = s2;
+        vals[2] = attVals.indexOf(s3);
+        vals[3] = attVals.indexOf(s5);
+        inst = new Instance(1.0, vals);
+
+        data = new Instances("Sentiment", atts, 0);
+        data.add(inst);
+        data.setClassIndex(3);
+
+        try {
+            Classifier tree = (Classifier) weka.core.SerializationHelper.read("./sentiment_without4.model");
+            double clsLabel = tree.classifyInstance(data.instance(0));
+            return data.classAttribute().value((int) clsLabel);
+        }
+        catch (FileNotFoundException e){
+            System.out.println(e);
+            return "Error file not found";
+        }
+        catch (IOException e){
+            System.out.println(e);
+            return "Error io";
+        }
+        catch (Exception e){
+            System.out.println(e);
+            return "Error";
+        }
+    }
+
+    public String test() {
+        return "TESTOK";
+    }
+
+	public String runTagger(String text) throws IOException, ClassNotFoundException {
+		
+        Sentence sentence = new Sentence();
+
+        sentence.tokens = Twokenize.tokenizeRawTweetText(text);
+        ModelSentence modelSentence = null;
+
+        if (sentence.T() > 0 && !justTokenize) {
+            modelSentence = new ModelSentence(sentence.T());
+            tagger.featureExtractor.computeFeatures(sentence, modelSentence);
+            goDecode(modelSentence);
+        }
+
+        return outputJustTagging(sentence, modelSentence);
 	}
 
 	/** Runs the correct algorithm (make config option perhaps) **/
@@ -237,24 +308,24 @@ public class RunTagger {
 	/**
 	 * assume mSent's labels hold the tagging.
 	 */
-	public void outputJustTagging(Sentence lSent, ModelSentence mSent) {
+	public String outputJustTagging(Sentence lSent, ModelSentence mSent) {
 		// mSent might be null!
+        String result = "[";
 
-		if (outputFormat.equals("conll")) {
-			for (int t=0; t < lSent.T(); t++) {
-				outputStream.printf("%s\t%s", 
-						lSent.tokens.get(t),  
-						tagger.model.labelVocab.name(mSent.labels[t]));
-				if (mSent.confidences != null) {
-					outputStream.printf("\t%s", formatConfidence(mSent.confidences[t]));
-				}
-				outputStream.printf("\n");
-			}
-			outputStream.println("");
-		} 
-		else {
-			die("bad output format for just tagging: " + outputFormat);
-		}
+        for (int t=0; t < lSent.T(); t++) {
+            if (t < lSent.T() - 1)
+                result += String.format("{\"word\":\"%s\", \"pos\":\"%s\"},",
+                        lSent.tokens.get(t),  
+                        tagger.model.labelVocab.name(mSent.labels[t]));
+            else
+                result += String.format("{\"word\":\"%s\", \"pos\":\"%s\"}",
+                        lSent.tokens.get(t),  
+                        tagger.model.labelVocab.name(mSent.labels[t]));
+
+        }
+        result += "]";
+
+        return result;
 	}
 	/**
 	 * assume mSent's labels hold the tagging.
@@ -302,66 +373,18 @@ public class RunTagger {
 
 
 	public static void main(String[] args) throws IOException, ClassNotFoundException {        
-		if (args.length > 0 && (args[0].equals("-h") || args[0].equals("--help"))) {
-			usage();
-		}
-
 		RunTagger tagger = new RunTagger();
-
-		int i = 0;
-		while (i < args.length) {
-			if (!args[i].startsWith("-")) {
-				break;
-			} else if (args[i].equals("--model")) {
-				tagger.modelFilename = args[i+1];
-				i += 2;
-			} else if (args[i].equals("--just-tokenize")) {
-				tagger.justTokenize = true;
-				i += 1;
-			} else if (args[i].equals("--decoder")) {
-				if (args[i+1].equals("viterbi")) tagger.decoder = Decoder.VITERBI;
-				else if (args[i+1].equals("greedy"))  tagger.decoder = Decoder.GREEDY;
-				else die("unknown decoder " + args[i+1]);
-				i += 2;
-			} else if (args[i].equals("--quiet")) {
-				tagger.noOutput = true;
-				i += 1;
-			} else if (args[i].equals("--input-format")) {
-				String s = args[i+1];
-				if (!(s.equals("json") || s.equals("text") || s.equals("conll")))
-					usage("input format must be: json, text, or conll");
-				tagger.inputFormat = args[i+1];
-				i += 2;
-			} else if (args[i].equals("--output-format")) {
-				tagger.outputFormat = args[i+1];
-				i += 2;
-			} else if (args[i].equals("--input-field")) {
-				tagger.inputField = Integer.parseInt(args[i+1]);
-				i += 2;
-			} else if (args[i].equals("--word-clusters")) {
-				WordClusterPaths.clusterResourceName = args[i+1];
-				i += 1;
-			} else if (args[i].equals("--no-confidence")) {
-				tagger.showConfidence = false;
-				i += 1;
-			}	
-			else {
-				System.out.println("bad option " + args[i]);
-				usage();                
-			}
-		}
-		
-		if (args.length - i > 1) usage();
-		if (args.length == i || args[i].equals("-")) {
-			System.err.println("Listening on stdin for input.  (-h for help)");
-			tagger.inputFilename = "/dev/stdin";
-		} else {
-			tagger.inputFilename = args[i];
-		}
-		
 		tagger.finalizeOptions();
-		
-		tagger.runTagger();		
+
+        int port = 25333;
+        if (args.length == 1)
+            port = Integer.parseInt(args[0]);
+
+        GatewayServer gatewayServer = new GatewayServer(tagger, port);
+        gatewayServer.start();
+        System.out.println("Gateway Server Started");
+
+        //tagger.runTagger(args[0]);		
 	}
 	
 	public void finalizeOptions() throws IOException {

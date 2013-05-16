@@ -182,6 +182,20 @@
 		  <version>2.0.0</version>
 		</dependency>
 		
-        <!-- END testing dependecies -->
+        <dependency>
+            <groupId>doesntMatter</groupId>
+            <artifactId>doesntMatter</artifactId>
+            <version>doesntMatter</version>
+            <scope>system</scope>
+            <systemPath>${basedir}/py4j-0.7.jar</systemPath>
+        </dependency>
+
+        <dependency>
+            <groupId>doesntMatter2</groupId>
+            <artifactId>doesntMatter2</artifactId>
+            <version>doesntMatter2</version>
+            <scope>system</scope>
+            <systemPath>${basedir}/weka.jar</systemPath>
+        </dependency>
     </dependencies>
 </project>
