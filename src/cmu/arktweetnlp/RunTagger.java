@@ -54,6 +54,9 @@ public class RunTagger {
 
 	PrintStream outputStream;
 	Iterable<Sentence> inputIterable = null;
+
+    Classifier model_with4;
+    Classifier model_without4;
 	
 	// Evaluation stuff
 	private static HashSet<String> _wordsInCluster;
@@ -81,6 +84,21 @@ public class RunTagger {
             tagger.loadModel(modelFilename);			
             System.err.println("Model Loaded.\n");
         }
+
+        try {
+            model_with4 = (Classifier) weka.core.SerializationHelper.read("./sentiment_with4.model");
+            model_without4 = (Classifier) weka.core.SerializationHelper.read("./sentiment_without4.model");
+        }
+        catch (FileNotFoundException e){
+            System.out.println(e);
+        }
+        catch (IOException e){
+            System.out.println(e);
+        }
+        catch (Exception e){
+            System.out.println(e);
+        }
+
 		this.outputStream = new PrintStream(System.out, true, "UTF-8");
 	}
 	public void detectAndSetInputFormat(String tweetData) throws IOException {
@@ -127,17 +145,8 @@ public class RunTagger {
         data.setClassIndex(4);
 
         try {
-            Classifier tree = (Classifier) weka.core.SerializationHelper.read("./sentiment_with4.model");
-            double clsLabel = tree.classifyInstance(data.instance(0));
+            double clsLabel = model_with4.classifyInstance(data.instance(0));
             return data.classAttribute().value((int) clsLabel);
-        }
-        catch (FileNotFoundException e){
-            System.out.println(e);
-            return "Error file not found";
-        }
-        catch (IOException e){
-            System.out.println(e);
-            return "Error io";
         }
         catch (Exception e){
             System.out.println(e);
@@ -176,17 +185,8 @@ public class RunTagger {
         data.setClassIndex(3);
 
         try {
-            Classifier tree = (Classifier) weka.core.SerializationHelper.read("./sentiment_without4.model");
-            double clsLabel = tree.classifyInstance(data.instance(0));
+            double clsLabel = model_without4.classifyInstance(data.instance(0));
             return data.classAttribute().value((int) clsLabel);
-        }
-        catch (FileNotFoundException e){
-            System.out.println(e);
-            return "Error file not found";
-        }
-        catch (IOException e){
-            System.out.println(e);
-            return "Error io";
         }
         catch (Exception e){
             System.out.println(e);
